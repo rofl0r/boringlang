@@ -1,0 +1,89 @@
+#syntax-a:
+*5 . 4
+#syntax-b:
+(*(5 .4))
+#test-eq
+
+#syntax-a:
+*5 + 4
+#syntax-b:
+((*5)+4)
+#test-eq
+
+#syntax-a:
+.a=b
+#syntax-b:
+.(a)=(b)
+#test-eq
+
+#syntax-a:
+3+5(6,8)
+#syntax-b:
+3+(5(6,8))
+#test-eq
+
+#syntax-a:
+3. 7(6,8)
+#syntax-b:
+(3. 7)(6,8)
+#test-eq
+
+#syntax-a:
+var x : 6 = 7 ; 8
+#syntax-b:
+((var x : 6) = 7) ; 8
+#test-neq
+
+#syntax-a:
+var x : 6 = 7 ; 8
+#syntax-b:
+(var x : 6 = 7) ; 8
+#test-eq
+
+#syntax-a:
+if (1) 2 else 3 ; 7
+#syntax-b:
+(if (1) {2} else {3}) ; 7
+#test-eq
+
+#syntax-a:
+(a) { a, c, }
+#syntax-b:
+(((a)) {(a), (c)})
+#test-eq
+
+#syntax-a:
+a(1, 2 + 6, 3)
+#syntax-b:
+((a)((1),(2+6),3))
+#test-eq
+
+#syntax-a:
+a?b:c?d:e
+#syntax-b:
+a?b:(c?d:e)
+#test-eq
+
+#syntax-a:
+(a) {.=1,2}
+#syntax-b:
+(a) {(.=1),(2)}
+#test-eq
+
+#syntax-a:
+a,b=c,d
+#syntax-b:
+(a,b,)=(c,d,)
+#test-eq
+
+#syntax-a:
+a[5,6]=8,9
+#syntax-b:
+((a)[(5,6,)])=(8,9)
+#test-eq
+
+#syntax-a:
+fn foo(a:u32=1,b:u32=2):s1;
+#syntax-b:
+fn foo(a:u32=1,b:u32=2):s1;
+#test-eq

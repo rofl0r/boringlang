@@ -1,0 +1,82 @@
+This is "boringlang", a small language + compiler that I made 2 years ago. It's
+incomplete, and I stopped working on it in the middle of it. It's a C-like
+language that was not meant to have GC, classes, templates etc. (thus "boring"),
+and I wrote it to explore what a better C would look like.
+
+The compiler is somewhat functional. There's a C backend for generating
+executable code, and the tests sub-directory contains some samples (that
+actually run and work). ("make tests" to confirm.)
+
+The language/compiler have the following features:
+- C-like syntax, but with Pascal-style declarations (declarations are always
+  started with specific tokens like "var" or "fn", and the type always comes
+  strictly after the name of the declared object).
+- Many of the basics one would expect from a realistic language work: basic
+  integer expressions, string literals, control structures like if/while/goto,
+  function calls, some C interop.
+  There are types like "u32", and C interop typedefs like "c_int".
+- Some focus on reducing undefined behavior: defined signed overflow, guaranteed
+  order of operations in presence of visible side-effects. Some implicit integer
+  conversion are disallowed compared to C.
+- Fixed size arrays are value types, and don't decay to pointers like C.
+- There are bounded pointers called slices (similar to D). They are basically
+  tuples of a pointer and a length value (for the language/compiler, they're
+  opaque types, and array syntax is used). The string type is u8[], and no
+  null-termination is required.
+  "void" is actually a typedef to "()", the empty tuple. "void" is no special
+  type, and can be declared/assigned/etc. like any type, unlike in C. (Though
+  there is "untyped", which is somewhat equivalent to void when used with
+  pointers. An "*untyped" is an untyped pointer which implicitly converts to
+  or from any other pointer type.)
+- Structs, designated initializers, struct literals, tuples.
+- Structs can have non-0 default values. Values on the stack are
+  default-initialized, and struct member default values are used for that.
+- The argument list of a Function signature is actually represented as struct.
+  This means you get named arguments for free.
+- It's possible to "expand" a struct or a tuple into an argument list (there's
+  a similar Python feature, but boringlang does this at compile time). Every
+  struct/tuple member sets a corresponding named or unnamed function argument.
+- Powerful varargs. A "..." vararg is actually an array (slice) of structs.
+  Each item is a parameter, and has name, type name, and pointer to the
+  parameter value. This would allow implementing a typesafe printf(), or even
+  a printf() with named elements (varargs support named parameters just fine
+  by passing along the named parameter name). The vararg object is constructed
+  on the stack, and requires no dynamic allocation.
+- C varargs are supported for calling, but not for being called.
+- Nested functions are supported. They are stack-closures, which can access
+  the local variables of any containing function.
+- Delegates: you can have a pointer to a stack closures, and call it. These
+  are not full closures, and invoke undefined behavior if the function
+  containing the nested function returns. On the other hand, they require no
+  memory allocation (and of course no executable stack, like gcc's non-sense
+  nested functions).
+- The compiler can even inline nested functions. It can even inline nested
+  functions that are passed as pointer to other nested functions and called
+  there (the compiler will just inline everything), which might be important
+  for efficient execution in cases you pass a small user-defined predicate
+  to an algorithm (e.g. with qsort()). That my compiler can do this was proof
+  for me that the D language is full, of shit. The compiler (dmd) is extremely
+  bad at this, and to "fix" this, they invented "string closures", which make
+  use of other capability of dmd, but which are extremely awkward, and have
+  problems with hygiene.
+  (The inlining can be seen with "main cg_o nested.ywn", although you need to
+  change main.c to raise the default optimization level.)
+- The semantic analysis pass of the compiler generates a SSA IR. There is a
+  relatively powerful IR optimizer. It can perform integer optimizations, CSE,
+  and inline function calls. The integer optimization does at least const
+  folding. Some ideas for the implementation of pattern matching parts of the
+  tree is borrowed from LuaJIT.
+
+I stopped working on this project. Feature ideas (and which also made everything
+so complicated that I stopped) included:
+- Fixing bugs or incomplete implementations in the feature set listed above.
+- Macros and compile time function execution. This was supposed to be a better
+  replacement for awful C++/D style templates.
+- Pattern matching (including destructuring).
+- A native x86 codegen backend.
+
+Copyright
+---------
+Most of this was written by me. talloc.c/.h is from Samba. The Makefile is
+adapted from mplayer's makefile. bstr.c/.h is from mplayer2. hashtable.c is
+inspired from Lua's table implementation, although no code was copied.

@@ -1,0 +1,5 @@
+*.o
+*.d
+/main
+/union_test
+/ht_test

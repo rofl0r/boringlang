@@ -1,0 +1,74 @@
+// TYPE: expr
+// TEST: pass
+/* STDOUT:
+hi
+*/
+
+fn printf {C} (fmt:c_string,...) : c_int;
+fn abort {C} () : void;
+
+fn assert(e:bool) : void {
+    if (!e)
+        abort();
+};
+
+fn foof (a : u32, b : u16) : u32
+{
+    return 123;
+};
+
+var xd : ^(u32, u16) : u32 = &foof;
+var yd : ^(bla : u32 = 5, blu : u16 = 7) : u32 = xd;
+assert(yd() == 123);
+var bla : fn {C} (c_string,...) : c_int;
+bla = &printf;
+bla(&"hi\n"[]);
+
+fn memcmp {C} (s1:*untyped, s2:*untyped, n : c_size_t) : c_int;
+
+fn streq(a:string, b:string):bool {
+    if (#a != #b)
+        return false;
+    return memcmp(&a[], &b[], #a) == 0;
+};
+
+assert(!streq("abc", "ab"));
+assert(!streq("abc", "abcd"));
+assert(streq("abc", "abc"));
+assert(streq("", ""));
+
+fn varg(a:u32, ...) : void {
+    var v : varargs = _varargs_;
+    assert(a == 1);
+    assert(#v == 3);
+
+    assert(streq((v[0]).name, ""));
+    assert(streq((v[0]).type, "u8"));
+    var p0 : *u8 = (v[0]).ptr;
+    assert(*p0 == 2);
+
+    assert(streq((v[1]).name, "bla"));
+    assert(streq((v[1]).type, "u16"));
+    var p1 : *u16 = (v[1]).ptr;
+    assert(*p1 == 512);
+
+    assert(streq((v[2]).name, "tp"));
+    assert(streq((v[2]).type, "p2_u32i32"));
+    var p2 : *(u32, i32) = (v[2]).ptr;
+    var x:u32=1;
+    var y:i32=2;
+    //assert((*p2) == (x,y));
+};
+
+fn varg_b(a:u32, ...) : void {
+    return varg(a, ... _varargs_);
+};
+
+fn null_items(...) : void {
+    assert(#_varargs_ == 0);
+};
+
+var a:u32=1;
+var b:i32=2;
+varg_b(1, 2, .bla = 512, .tp = (a, b));
+null_items();

@@ -1,0 +1,114 @@
+// TEST: pass
+// TYPE: expr
+/* STDOUT:
+hi 123!
+bla u
+6
+äöü
+e1
+e2
+e3
+e4
+e5
+e6
+e7
+*/
+
+fn printf {C} (fmt:*u8,...) : i32;
+fn abort {C} () : void;
+
+fn assert(e:bool) : void {
+    if (!e)
+        abort();
+};
+
+var a : u32 = 123;
+var b : u32;
+b = a + b + 5;
+if (b != 128)
+    abort();
+
+printf(&"hi %d!\n"[], 123);
+printf(&"%s %c\n"[], &"bla"[], "hu"[1]);
+
+var c : u32[10];
+c[3] = 1;
+c[4] = 5;
+printf(&"%d\n"[], c[3] + c[4]);
+
+// must not return pointers to temporaries
+var sc : u32[] = c[];
+if (&sc[] != &c[0])
+    abort();
+
+// arrays are values, slices are fat pointers
+var d = c;
+d[3] = 2;
+if (c[3] == d[3] || d[3] != 2)
+    abort();
+if (c[3] != sc[3])
+    abort();
+
+//var e : u32[] = (&c[0])[0..10];
+assert(#"abc" == 3);
+assert(#sc == 10);
+assert(#c == 10);
+var bla = "abc\n\td";
+assert(#bla == 6 && bla[3] == '\n' && bla[5] == 'd');
+printf(&"äöü\n"[]);
+
+// check some stuff about sideeffects (see checked output in STDOUT test header)
+fn ok(a:u32) : bool {
+    printf(&"e%d\n"[], a);
+    return true;
+};
+fn notok() : bool {
+    abort();
+    return false;
+};
+assert((ok(1) || notok()) == true);
+assert((ok(2) && ok(3)) == true);
+assert((ok(4) ? ok(5) : notok()) == true);
+assert((!ok(6) ? notok() : ok(7)) == true);
+assert((true ? 1 : 2) == 1);
+assert((false ? 1 : 2) == 2);
+
+var i : u32 = 5;
+var u : u32;
+u = 2;
+while (i) {
+    i = i - 1;
+    u = u * 2;
+};
+assert(u == 64);
+
+struct foo {
+    a : u32 = 123;
+    b : u16;
+    //c, d, e : u16;
+};
+
+var z : foo = (foo) { .b = 1 } ;
+assert(z.a == 123 && z.b == 1);
+var az : u32[4] = (u32[4]) { 1, 2 };
+assert(az[0] == 1 && az[1] == 2 && az[2] == 0 && az[3] == 0);
+var az2 : u32[] = (u32[]) { 1, 2 };
+assert(#az2 == 2);
+assert(az2[0] == 1 && az2[1] == 2);
+
+var t : (u32, u16);
+var t2 : (u32, u16);
+t = t2;
+
+var az3 : foo[3] = (foo[3]) { };
+assert((az3[0]).a == 123);
+var az4 : foo[3];
+assert((az4[0]).a == 123);
+
+// void values/types are first class
+var v : void = ();
+fn vfn(z:void):void {
+    var x : () = z;
+    return z;
+};
+v = vfn(v);

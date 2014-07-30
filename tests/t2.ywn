@@ -1,0 +1,4 @@
+// TEST: fail_compile_parse
+// TYPE: expr
+
+hello there

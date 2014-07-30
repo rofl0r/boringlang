@@ -1,0 +1,16 @@
+// TYPE: expr
+/* STDOUT:
+2
+*/
+// Not sure if this behavior is supposed to be valid, or is just an accidental
+// result. However, it exposed a bug in backend_c.c
+
+fn printf {C} (fmt:*u8,...) : i32;
+
+var x : u32 = 1;
+fn mutate_x() : u32 {
+    x = 123;
+    return 1;
+};
+var y = x + mutate_x();
+printf(&"%d\n"[], y);

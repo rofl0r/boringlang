@@ -1,0 +1,61 @@
+// TYPE: expr
+
+fn memcmp {C} (s1:*untyped, s2:*untyped, n : c_size_t) : c_int;
+fn abort {C} () : void;
+
+fn streq(a:string, b:string):bool {
+    if (#a != #b)
+        return false;
+    return memcmp(&a[], &b[], #a) == 0;
+};
+
+fn assert(e:bool) : void {
+    if (!e)
+        abort();
+};
+
+fn get_type(...):string {
+    assert(#_varargs_ == 1);
+    return (_varargs_[0]).type;
+};
+
+fn assert_type(t:string,...) : void {
+    assert(streq(get_type(... _varargs_), t));
+};
+
+// integer constants
+var i1 : i16 = 255u8;
+assert(i1 == 255);
+var i2 : i16 = -127i8;
+assert(i2 == -127i32);
+
+assert_type("u8", 1u8);
+assert_type("u8", 255u8);
+assert_type("u64", 1u64);
+assert_type("u8", 1);
+assert_type("u8", 255);
+assert_type("u16", 257);
+assert_type("i8", -128);
+assert_type("i16", -129);
+assert_type("u32", 0xFFFFFFFF);
+assert_type("i32", -0x80000000);
+assert_type("i64", -0x80000001);
+assert_type("u64", 0x100000000);
+assert_type("i64", -0xFFFFFFFF);
+assert_type("i64", -0x8000000000000000);
+assert(-0x8000000000000000 + 1 == -0x7FFFFFFFFFFFFFFF);
+assert(-0x8000000000000000 < 0);
+
+// booleans are kind of like 1-bit wide integers, but no integer promotion
+assert((~true) == false);
+
+// even signed integer are supposed to follow 2's complement
+assert((127i8 + 1i8) == -128i8);
+
+// fucked up semantics for negating unsigned ints
+// make sure const folding and normal compilation give same results
+assert_type("u8", -0xF0u8);
+var t1 : u8 = 0xF0u8;
+assert_type("u8", -t1);
+t1 = -t1; assert(t1 == 0x10u8);
+assert((-0xF0u8) == 0x10u8);
