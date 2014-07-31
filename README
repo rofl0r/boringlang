@@ -55,19 +55,19 @@ The language/compiler have the following features:
   there (the compiler will just inline everything), which might be important
   for efficient execution in cases you pass a small user-defined predicate
   to an algorithm (e.g. with qsort()). That my compiler can do this was proof
-  for me that the D language is full, of shit. The compiler (dmd) is extremely
+  for me that the D language is full of shit. The compiler (dmd) is extremely
   bad at this, and to "fix" this, they invented "string closures", which make
-  use of other capability of dmd, but which are extremely awkward, and have
+  use of other capabilities of dmd, but which are extremely awkward, and have
   problems with hygiene.
   (The inlining can be seen with "main cg_o nested.ywn", although you need to
   change main.c to raise the default optimization level.)
 - The semantic analysis pass of the compiler generates a SSA IR. There is a
   relatively powerful IR optimizer. It can perform integer optimizations, CSE,
   and inline function calls. The integer optimization does at least const
-  folding. Some ideas for the implementation of pattern matching parts of the
-  tree is borrowed from LuaJIT.
+  folding. Some ideas for the implementation of pattern matching on the IR
+  tree are borrowed from LuaJIT (it called it fold engine).
 
-I stopped working on this project. Feature ideas (and which also made everything
+I stopped working on this project. Future ideas (and which also made everything
 so complicated that I stopped) included:
 - Fixing bugs or incomplete implementations in the feature set listed above.
 - Macros and compile time function execution. This was supposed to be a better
