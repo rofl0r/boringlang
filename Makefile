@@ -21,9 +21,11 @@ SOURCES = main.c \
           tycg.c \
           backend_c.c \
           utils.c \
-          talloc.c \
           hashtable.c \
-          bstr.c
+          bstr.c \
+          ta/ta.c \
+          ta/ta_talloc.c \
+          ta/ta_utils.c
 
 OBJECTS = $(SOURCES:.c=.o)
 DEP_FILES = $(OBJECTS:.o=.d)

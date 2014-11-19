@@ -202,8 +202,7 @@ static void random_tests(void)
 
 int main(int argc, char **argv)
 {
-    // leak report
-    talloc_enable_null_tracking();
+    ta_enable_leak_report();
 
     void *ctx = talloc_new(NULL);
 
@@ -278,7 +277,5 @@ error_exit:
     gres = 10;
 done:
     talloc_free(ctx);
-    // leak report
-    talloc_report_null_full();
     return gres;
 }

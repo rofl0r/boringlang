@@ -23,28 +23,13 @@ void *talloc_from_(void *ctx, size_t size, void *data);
 #define BL_EXPAND_ARGS(...) __VA_ARGS__
 #define BL_CONCAT(a, b) a ## b
 
-#define talloc_struct(ctx, type, ...) \
-    talloc_from(ctx, type, &(type) BL_EXPAND_ARGS(__VA_ARGS__) )
-
 #define t_steal talloc_steal
 
-#define BL_TARRAY_ELEMS(p) (talloc_get_size(p) / sizeof((p)[0]))
+#define BL_TARRAY_ELEMS MP_TALLOC_ELEMS
+#define BL_TARRAY_GROW MP_TARRAY_GROW
+#define BL_TARRAY_APPEND MP_TARRAY_APPEND
+#define BL_TARRAY_REMOVE_AT MP_TARRAY_REMOVE_AT
 
-#define BL_TARRAY_GROW(ctx, p, nextidx)             \
-    do {                                            \
-        size_t nextidx_ = (nextidx);                \
-        size_t nelems_ = BL_TARRAY_ELEMS(p);        \
-        if (nextidx_ >= nelems_)                    \
-            p = talloc_realloc_size((ctx), p,       \
-               (nextidx_ + 1) * sizeof((p)[0]) * 2);\
-    } while (0)
-
-#define BL_TARRAY_APPEND(ctx, p, idxvar, val)       \
-    do {                                            \
-        BL_TARRAY_GROW(ctx, p, idxvar);             \
-        p[idxvar] = (val);                          \
-        idxvar++;                                   \
-    } while (0)
 
 #define BL_TARRAY_INSERT_AT(ctx, p, idxvar, at, val)\
     do {                                            \
@@ -55,16 +40,6 @@ void *talloc_from_(void *ctx, size_t size, void *data);
                 (idxvar - at_) * sizeof(p[0]));     \
         idxvar++;                                   \
         p[at_] = (val);                             \
-    } while (0)
-
-// Doesn't actually free any memory.
-#define BL_TARRAY_REMOVE_AT(p, idxvar, at)          \
-    do {                                            \
-        size_t at_ = (at);                          \
-        assert(at_ <= idxvar);                      \
-        memmove(p + at_, p + at_ + 1,               \
-                (idxvar - at_) * sizeof(p[0]));     \
-        idxvar--;                                   \
     } while (0)
 
 #define BL_PRINTF_ATTRIBUTE(a1, a2) __attribute__ ((format (printf, a1, a2)))
