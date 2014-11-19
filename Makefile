@@ -1,4 +1,5 @@
 # Makefile stolen from mplayer2
+# Might be subject to GPLv2.
 
 main:
 
