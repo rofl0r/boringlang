@@ -47,7 +47,7 @@ char *type_str(void *ctx, struct ir_type t)
         }
         case IR_TYPE_tstruct: {
             struct ir_struct_type *st = *GET_UNION(IR_TYPE, tstruct, &t);
-            return talloc_asprintf(ctx, "struct %.*s", BSTR_P(st->name));
+            return talloc_asprintf(ctx, "struct %s", st->name);
         }
         case IR_TYPE_ttuple: {
             struct ir_struct_type *st = *GET_UNION(IR_TYPE, ttuple, &t);
@@ -94,7 +94,7 @@ char *type_str(void *ctx, struct ir_type t)
 
 static char *link_str(void *ctx, struct ir_link_name name)
 {
-    return talloc_asprintf(ctx, "%.*s", BSTR_P(name.name));
+    return talloc_asprintf(ctx, "%s", name.name);
 }
 
 static char *inst_str(void *ctx, struct ir_function *fn, struct ir_inst *in)
@@ -104,8 +104,7 @@ static char *inst_str(void *ctx, struct ir_function *fn, struct ir_inst *in)
     switch (in->op) {
         case IR_OP_GETARG: {
             struct ir_struct_member *m = in->struct_member;
-            return talloc_asprintf(ctx, "%s %d '%.*s'", ins, m->index,
-                                   BSTR_P(m->name));
+            return talloc_asprintf(ctx, "%s %d '%s'", ins, m->index, m->name);
         }
         case IR_OP_VAR_PTR:
         case IR_OP_UPVAL_PTR:
@@ -113,17 +112,16 @@ static char *inst_str(void *ctx, struct ir_function *fn, struct ir_inst *in)
         case IR_OP_WRITE_VAR:
         {
             struct ir_var *v = in->var;
-            return talloc_asprintf(ctx, "%s %d%s '%.*s'", ins, v->index,
-                                   v->fn == fn ? "" : " [non-local]",
-                                   BSTR_P(v->name));
+            return talloc_asprintf(ctx, "%s %d%s '%s'", ins, v->index,
+                                   v->fn == fn ? "" : " [non-local]", v->name);
         }
         case IR_OP_GET_STRUCT_MEMBER_PTR:
         case IR_OP_GET_STRUCT_MEMBER:
         case IR_OP_SET_STRUCT_MEMBER:
         {
             struct ir_struct_member *m = in->struct_member;
-            if (m->name.len) {
-                return talloc_asprintf(ctx, "%s '%.*s'", ins, BSTR_P(m->name));
+            if (m->name) {
+                return talloc_asprintf(ctx, "%s '%s'", ins, m->name);
             } else {
                 return talloc_asprintf(ctx, "%s &%d", ins, m->index);
             }
@@ -188,8 +186,8 @@ void dump_fn(FILE *f, struct ir_function *fn)
     fprintf(f, "Vars:\n");
     for (int n = 0; n < fn->vars_count; n++) {
         struct ir_var *var = fn->vars[n];
-        fprintf(f, "   %d: %s '%.*s' %s\n", dump_varid(fn, var),
-                type_str(t, var->type), BSTR_P(var->name),
+        fprintf(f, "   %d: %s '%s' %s\n", dump_varid(fn, var),
+                type_str(t, var->type), var->name,
                 loc_str(t, var->loc));
     }
     int in_nr = 0;

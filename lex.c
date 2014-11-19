@@ -30,15 +30,15 @@ static const char* keywords[] = {
 
 char *source_pos_string(struct source_pos pos)
 {
-    return talloc_asprintf(NULL, "%.*s:%d:%d", BSTR_P(pos.filename),
-                           pos.line, pos.column);
+    return talloc_asprintf(NULL, "%s:%d:%d", pos.filename, pos.line, pos.column);
 }
 
-struct lexer *lexer_new(bstr source, bstr filename)
+struct lexer *lexer_new(char *source, char *filename)
 {
     struct lexer *lex = talloc_zero(NULL, struct lexer);
-    lex->source = bstrdup(lex, source);
-    lex->pos = (struct source_pos) {1, 1, 0, bstrdup(lex, filename)};
+    lex->source = talloc_strdup(lex, source);
+    lex->source_len = strlen(lex->source);
+    lex->pos = (struct source_pos) {1, 1, 0, talloc_strdup(lex, filename)};
     return lex;
 }
 
@@ -78,7 +78,7 @@ bool lexer_state_restore(struct lexer *lex, struct lexer_state_backup *state)
 
 bool lexer_eof(struct lexer *lex)
 {
-    return lex->pos.byte >= lex->source.len;
+    return lex->pos.byte >= lex->source_len;
 }
 
 bool lexer_finished(struct lexer *lex)
@@ -92,7 +92,7 @@ static int read_char(struct lexer *lex)
     if (lexer_eof(lex))
         return -1;
     // "should" do UTF-8 parsing here
-    unsigned char c = lex->source.start[lex->pos.byte];
+    unsigned char c = lex->source[lex->pos.byte];
     lex->pos.byte++;
     lex->pos.column++;
     if (c == '\n') {
@@ -105,9 +105,9 @@ static int read_char(struct lexer *lex)
 static bool skip_str(struct lexer *lex, const char *str)
 {
     int len = strlen(str);
-    if (lex->pos.byte + len > lex->source.len)
+    if (lex->pos.byte + len > lex->source_len)
         return false;
-    if (memcmp(lex->source.start + lex->pos.byte, str, len) != 0)
+    if (memcmp(lex->source + lex->pos.byte, str, len) != 0)
         return false;
     for (int n = 0; n < len; n++)
         read_char(lex);
@@ -118,7 +118,7 @@ static int read_any(struct lexer *lex, const char *set)
 {
     if (lexer_eof(lex))
         return 0;
-    char c = lex->source.start[lex->pos.byte];
+    char c = lex->source[lex->pos.byte];
     if (!c || !strchr(set, c))
         return 0;
     return read_char(lex);
@@ -190,19 +190,19 @@ static bool lex_number(struct lexer *lex)
             goto err;
         num_end = lex->pos.byte;
 
-        bstr s = bstr_splice(lex->source, num_start, num_end);
-        bstr rest;
-        double num = bstrtod(s, &rest);
-        if (rest.len)
+        char *s = talloc_strndup(lex, lex->source + num_start, num_end - num_start);
+        char *rest = NULL;
+        double num = strtod(s, &rest);
+        if (rest && rest[0])
             goto err;
         lex->token.type = TOKEN_LIT;
         lex->token.value = s;
         lex->token.lit_value = MAKE_LEX_CONST(cdouble, num);
     } else {
-        bstr s = bstr_splice(lex->source, num_start, num_end);
-        bstr rest;
-        uint64_t val = bstrtoull(s, &rest, radix);
-        if (rest.len)
+        char *s = talloc_strndup(lex, lex->source + num_start, num_end - num_start);
+        char *rest = NULL;
+        uint64_t val = strtoull(s, &rest, radix);
+        if (rest && rest[0])
             goto err;
         int sign = 0, bits = 0;
         int tok = read_any(lex, "ui");
@@ -236,7 +236,7 @@ static bool lex_id(struct lexer *lex)
 {
     int start = lex->pos.byte;
     while (!lexer_eof(lex)) {
-        unsigned char c = lex->source.start[lex->pos.byte];
+        unsigned char c = lex->source[lex->pos.byte];
         if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
             || (c >= '0' && c <= '9') || c == '_')
         {
@@ -248,9 +248,10 @@ static bool lex_id(struct lexer *lex)
     if (start == lex->pos.byte)
         return false;
     lex->token.type = TOKEN_ID;
-    lex->token.value = bstr_splice(lex->source, start, lex->pos.byte);
+    lex->token.value = talloc_strndup(lex, lex->source + start,
+                                      lex->pos.byte - start);
     for (const char **keyword = keywords; *keyword; keyword++) {
-        if (bstrcmp0(lex->token.value, *keyword) == 0) {
+        if (strcmp(lex->token.value, *keyword) == 0) {
             lex->token.type = TOKEN_TOK;
             break;
         }
@@ -260,7 +261,7 @@ static bool lex_id(struct lexer *lex)
 
 static int read_hex_digit(struct lexer *lex)
 {
-    unsigned char c = lex->source.start[lex->pos.byte];
+    unsigned char c = lex->source[lex->pos.byte];
     if (c >= '0' && c <= '9') {
         read_char(lex);
         return c - '0';
@@ -335,7 +336,7 @@ static bool lex_string(struct lexer *lex)
         return false;
     struct source_pos start = lex->pos;
     struct source_pos last = start;
-    bstr vstr = {0};
+    char *vstr = talloc_strdup(lex, "");
     for (;;) {
         int c = read_char(lex);
         if (c < 0) {
@@ -343,39 +344,35 @@ static bool lex_string(struct lexer *lex)
             return false;
         }
         if (c == '\\') {
-            bstr pre = bstr_splice(lex->source, last.byte, lex->pos.byte - 1);
-            bstr_append(lex, &vstr, pre);
+            vstr = talloc_strndup_append(vstr, lex->source + last.byte,
+                                         lex->pos.byte - 1 - last.byte);
             c = read_escape(lex);
             // Assume characters are always byte-range for now
             // (needs utf-8 encoder for full unicode)
-            bstr_append(lex, &vstr, (bstr) { &(char) {c}, 1 });
+            vstr = talloc_strndup_append(vstr, &(char) {c}, 1);
             last = lex->pos;
         }
         if (c == '"')
             break;
     }
     lex->token.type = TOKEN_LIT;
-    bstr tail = bstr_splice(lex->source, last.byte, lex->pos.byte - 1);
-    if (vstr.len) {
-        bstr_append(lex, &vstr, tail);
-    } else {
-        vstr = tail;
-    }
+    vstr = talloc_strndup_append(vstr, lex->source + last.byte,
+                                 lex->pos.byte - 1 - last.byte);
     lex->token.lit_value = MAKE_LEX_CONST(cstring, vstr);
     return true;
 }
 
 static bool lex_tok(struct lexer *lex)
 {
-    int start = lex->pos.byte;
-    bstr src = bstr_cut(lex->source, start);
+    char *src = lex->source + lex->pos.byte;
     for (const char **op = operators; *op; op++) {
-        bstr tok = bstr0(*op);
-        if (bstr_startswith(src, tok)) {
+        char *tok = (char *)*op;
+        int tok_len = strlen(tok);
+        if (strncmp(src, tok, tok_len) == 0) {
             lex->token.type = TOKEN_TOK;
-            lex->token.value = bstr_splice(src, 0, tok.len);
+            lex->token.value = tok;
             // this is retarded (account for column pos)
-            for (int n = 0; n < tok.len; n++)
+            for (int n = 0; n < tok_len; n++)
                 read_char(lex);
             return true;
         }
@@ -406,7 +403,7 @@ bool lexer_next(struct lexer *lex)
     if (lex->errors)
         return false;
 
-    if (lex->source.start[lex->pos.byte] == '\0')
+    if (lex->source[lex->pos.byte] == '\0')
         lexer_error_at(lex, lex->pos, "embedded \\0!");
     else
         lexer_error_at(lex, lex->pos, "unlexable.");
@@ -423,12 +420,12 @@ static const char *token_str[] = {
     [TOKEN_LIT] = "literal",
 };
 
-char *token_string(enum token_type type, bstr value)
+char *token_string(enum token_type type, char *value)
 {
     void *ctx = talloc_new(NULL);
     char *valuestr = NULL;
-    if (value.len) {
-        valuestr = talloc_asprintf(ctx, "%.*s", BSTR_P(value));
+    if (value && value[0]) {
+        valuestr = talloc_asprintf(ctx, "%s", value);
         if (type != TOKEN_TOK)
             valuestr = talloc_asprintf(ctx, "'%s'", valuestr);
     }
@@ -456,7 +453,7 @@ static char *int_tag(int tag)
     }
 }
 
-static char *const_str(void *tctx, const char *desc, bstr s)
+static char *const_str(void *tctx, const char *desc, char *s)
 {
     char *t = string_unparse(NULL, s);
     char *res = talloc_asprintf(tctx, "%s (%s)", t, desc);
@@ -478,7 +475,7 @@ char *lexer_const_string(void *tctx, struct lex_const lc)
                                     *GET_UNION(LEX_CONST, cdouble, &lc));
         case LEX_CONST_cchar: {
             char s[2] = { *GET_UNION(LEX_CONST, cchar, &lc), '\0' };
-            return const_str(tctx, "char", bstr0(s));
+            return const_str(tctx, "char", s);
         }
         case LEX_CONST_cstring:
             return const_str(tctx, "string",
@@ -496,8 +493,8 @@ char *full_token_string(struct token token)
     if (token.type == TOKEN_LIT) {
         res = talloc_asprintf_append(res, " [%s]",
                         lexer_const_string(res, token.lit_value));
-    } else if (token.value.len) {
-        res = talloc_asprintf_append(res, " [%.*s]", BSTR_P(token.value));
+    } else if (token.value && token.value[0]) {
+        res = talloc_asprintf_append(res, " [%s]", token.value);
     }
     talloc_free_children(res);
     return res;
@@ -516,7 +513,7 @@ void lexer_expected_token(struct lexer *lex, enum token_type type,
 {
     void *ctx = talloc_new(NULL);
     lexer_error_at(lex, lex->pos, "expected token %s, but got %s",
-                   talloc_steal(ctx, token_string(type, bstr0(value))),
+                   talloc_steal(ctx, token_string(type, (char *)value)),
                    talloc_steal(ctx, token_string(lex->token.type,
                                                   lex->token.value)));
     talloc_free(ctx);
@@ -529,7 +526,7 @@ bool lexer_peek(struct lexer *lex, enum token_type type)
 
 bool lexer_peek_tok(struct lexer *lex, const char *tok)
 {
-    return lexer_peek(lex, TOKEN_TOK) && bstrcmp0(lex->token.value, tok) == 0;
+    return lexer_peek(lex, TOKEN_TOK) && strcmp(lex->token.value, tok) == 0;
 }
 
 bool lexer_try_eat_tok(struct lexer *lex, const char *tok)
@@ -547,15 +544,15 @@ void lexer_eat_tok(struct lexer *lex, const char *tok)
         lexer_expected_token(lex, TOKEN_TOK, tok);
 }
 
-bstr lexer_eat_id(struct lexer *lex)
+char *lexer_eat_id(struct lexer *lex)
 {
     if (lexer_peek(lex, TOKEN_ID)) {
-        bstr id = lex->token.value;
+        char *id = lex->token.value;
         lexer_next(lex);
         return id;
     }
     lexer_expected_token(lex, TOKEN_ID, NULL);
-    return bstr0("<error>");
+    return "<error>";
 }
 
 struct lex_const lexer_eat_lit(struct lexer *lex)

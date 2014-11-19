@@ -33,7 +33,7 @@ static bool struct_equals(struct ir_struct_type *s1, struct ir_struct_type *s2,
         if (!type_equals(m1->type, m2->type))
             return false;
         if (compare_metadata) {
-            if (bstrcmp(m1->name, m2->name) != 0)
+            if (strcmp(m1->name, m2->name) != 0)
                 return false;
             if (!!m1->init != !!m2->init)
                 return false;
@@ -356,7 +356,7 @@ char *type_vararg_mangle(struct ir_types *ctx, struct ir_type t)
             // If we want "absolute" type-safety, we could append the item-wise
             // mangle, as it is done with tuples.
             struct ir_struct_type *st = *GET_UNION(IR_TYPE, tstruct, &t);
-            return talloc_asprintf(ctx, "t'%.*s'", BSTR_P(st->name));
+            return talloc_asprintf(ctx, "t'%s'", st->name);
         }
         case IR_TYPE_ttuple:
             return struct_vararg_mangle(ctx, "p",
@@ -400,7 +400,7 @@ struct ir_struct_type *struct_start(struct ir_types *ctx, LOC loc)
 }
 
 struct ir_struct_member *struct_add(struct ir_struct_type *st, LOC m_loc,
-                                    bstr m_name, struct ir_type m_type,
+                                    char *m_name, struct ir_type m_type,
                                     struct ir_const_val *m_init)
 {
     assert(!st->defined);
@@ -417,7 +417,7 @@ struct ir_struct_member *struct_add(struct ir_struct_type *st, LOC m_loc,
         });
     talloc_steal(sm, m_init);
     BL_TARRAY_APPEND(st, st->members, st->members_count, sm);
-    if (m_name.len) {
+    if (m_name && m_name[0]) {
         scope_add(st->scope, m_name,
                     (struct ast_sym) MAKE_UNION(AST_SYM, struct_member, sm));
     }
@@ -444,7 +444,7 @@ void struct_end(struct ir_struct_type *st, bool add_init)
     st->defined = true;
 }
 
-struct ir_struct_member *struct_find_member(struct ir_struct_type *t, bstr name)
+struct ir_struct_member *struct_find_member(struct ir_struct_type *t, char *name)
 {
     struct ast_sym *sym = scope_lookup(t->scope, name);
     return sym ? *GET_UNION(AST_SYM, struct_member, sym) : NULL;
@@ -456,11 +456,11 @@ static struct ir_type create_vararg_struct(struct ir_types *t)
     struct ir_struct_type *st = struct_start(t, loc);
     // The order, types, and count of these struct fields are hardcoded
     // somewhere else in the compiler (have fun finding them).
-    struct_add(st, loc, bstr0("ptr"), TYPE_G_PTR, NULL);
-    struct_add(st, loc, bstr0("name"), TYPE_STRING, NULL);
-    struct_add(st, loc, bstr0("type"), TYPE_STRING, NULL);
+    struct_add(st, loc, "ptr", TYPE_G_PTR, NULL);
+    struct_add(st, loc, "name", TYPE_STRING, NULL);
+    struct_add(st, loc, "type", TYPE_STRING, NULL);
     struct_end(st, true);
-    st->name = bstr0("vararg");
+    st->name = "vararg";
     return MAKE_IR_TYPE(tstruct, st);
 }
 
@@ -469,8 +469,8 @@ static struct ir_fn_type *create_c_main_fntype(struct ir_types *t)
     struct ir_fn_type *m = talloc_zero(t, struct ir_fn_type);
     m->args = struct_start(t, m->loc);
     struct ir_type c_int = MAKE_IR_TYPE(tint, IR_INTT_32 | IR_INTT_SIGNED);
-    struct_add(m->args, m->loc, bstr0("argc"), c_int, NULL);
-    struct_add(m->args, m->loc, bstr0("argv"),
+    struct_add(m->args, m->loc, "argc", c_int, NULL);
+    struct_add(m->args, m->loc, "argv",
                type_ptr_to(t, type_ptr_to(t, TYPE_CHAR)), NULL);
     struct_end(m->args, false);
     talloc_steal(m, m->args);
@@ -568,7 +568,7 @@ struct ir_type type_common(struct ir_type t1, struct ir_type t2)
     (struct ast_sym) MAKE_UNION(AST_SYM, const_, \
         talloc_struct(tctx, struct ir_const_val, {t, v}))
 
-#define ADD(name, sym) scope_add(scope, bstr0(name), sym);
+#define ADD(name, sym) scope_add(scope, name, sym);
 
 void add_predefined_types(struct ir_scope *scope, struct ir_types *t)
 {

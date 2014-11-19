@@ -9,7 +9,6 @@ static size_t hashdata_size(enum hashdata_type type)
         case HT_DATA_dint: return sizeof(int);
         case HT_DATA_dptr: return sizeof(void*);
         case HT_DATA_dstr: return sizeof(char*);
-        case HT_DATA_dbstr: return sizeof(bstr);
         case HT_DATA_dcustomptr: return sizeof(void*);
         case HT_DATA_dcustom: return sizeof(union hashdata);
         default: assert(false);

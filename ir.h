@@ -4,13 +4,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "lex.h"
-#include "bstr.h"
 #include "types.h"
 #include "value.h"
 
 // Representation of an imported or exported symbol on the link level.
 struct ir_link_name {
-    bstr name;
+    char *name;
     bool visible;
     bool is_c;          // mangle name?
 };
@@ -215,7 +214,7 @@ struct ast_sym {
 };
 
 struct scope_entry {
-    bstr name;
+    char *name;
     struct ast_sym sym;
 };
 
@@ -226,12 +225,12 @@ struct ir_scope {
     struct ir_scope *next;
 };
 
-struct ast_sym *scope_lookup(struct ir_scope *scope, bstr name);
-void scope_add(struct ir_scope *scope, bstr name, struct ast_sym entry);
+struct ast_sym *scope_lookup(struct ir_scope *scope, char *name);
+void scope_add(struct ir_scope *scope, char *name, struct ast_sym entry);
 
 struct ir_var {
     int index;
-    bstr name;                  // optional, not unique
+    char *name;                 // optional, not unique
     source_pos loc;             // closest loc possible (might be not exact)
     struct ir_function *fn;
     struct ir_type type;
@@ -278,7 +277,7 @@ struct ir_var_decl {
 
 struct ir_unit {
     source_pos loc;
-    //bstr name;
+    //char *name;
 
     struct ir_types *global_types;
 

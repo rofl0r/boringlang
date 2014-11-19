@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "bstr.h"
 #include "types.h"
 
 // @ALL value_type
@@ -24,7 +23,7 @@ struct value {
     union {
         uint64_t vuint64;
         double vdouble;
-        bstr vstring;
+        char *vstring;
         struct ir_struct_const *vstruct;
         void *vptr;
         struct ir_array_const *varray;
@@ -59,7 +58,7 @@ struct ir_array_const {
 
 bool int_convertible(bool src_sign, int src_bits, bool dst_sign, int dst_bits);
 
-char *string_unparse(void *talloc, bstr s);
+char *string_unparse(void *talloc, char  *s);
 
 struct ir_const_val type_init_value(struct ir_type t);
 struct ir_const_val const_from_int_lit(struct lex_const c, bool negate);

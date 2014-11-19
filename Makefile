@@ -22,7 +22,6 @@ SOURCES = main.c \
           backend_c.c \
           utils.c \
           hashtable.c \
-          bstr.c \
           ta/ta.c \
           ta/ta_talloc.c \
           ta/ta_utils.c

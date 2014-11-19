@@ -2,13 +2,12 @@
 #define BL_LEX_H
 
 #include <stdbool.h>
-#include "bstr.h"
 #include "union.h"
 
 struct source_pos {
     int line, column;
     int byte;
-    bstr filename;
+    char *filename;
 };
 
 typedef struct source_pos source_pos;
@@ -33,7 +32,7 @@ struct lex_const {
         struct lex_int cint;
         double cdouble;
         int cchar;
-        bstr cstring;
+        char *cstring;
     } u;
 };
 
@@ -51,12 +50,13 @@ enum token_type {
 struct token {
     enum token_type type;
     struct source_pos pos;
-    bstr value;
+    char *value;
     struct lex_const lit_value;
 };
 
 struct lexer {
-    bstr source;
+    char *source;
+    int source_len;
     struct source_pos pos;
     struct token token;
 
@@ -70,12 +70,12 @@ struct lexer_state_backup {
 };
 
 char *source_pos_string(struct source_pos pos);
-char *token_string(enum token_type type, bstr value);
+char *token_string(enum token_type type, char *value);
 char *full_token_string(struct token token);
 
 void merge_loc(struct source_pos *pos, struct source_pos npos);
 
-struct lexer *lexer_new(bstr source, bstr filename);
+struct lexer *lexer_new(char *source, char *filename);
 void lexer_error_at(struct lexer *lex, struct source_pos pos,
                     const char *msg, ...);
 bool lexer_eof(struct lexer *lex);
@@ -93,7 +93,7 @@ bool lexer_peek(struct lexer *lex, enum token_type type);
 bool lexer_peek_tok(struct lexer *lex, const char *tok);
 bool lexer_try_eat_tok(struct lexer *lex, const char *tok);
 void lexer_eat_tok(struct lexer *lex, const char *tok);
-bstr lexer_eat_id(struct lexer *lex);
+char *lexer_eat_id(struct lexer *lex);
 struct lex_const lexer_eat_lit(struct lexer *lex);
 
 char *lexer_const_string(void *tctx, struct lex_const lc);

@@ -64,7 +64,7 @@ typedef struct ir_context CTX;
 // only temporary during compilation
 struct ir_label {
     source_pos loc;
-    bstr name;
+    char *name;
     bool defined;       // is false while it's being forward-referenced
     struct ir_bb *bb;
 };
@@ -179,7 +179,7 @@ static struct ir_inst *cg_void(CTX *ctx, LOC loc)
     return cg_init(ctx, loc, ctx->types->tvoid);
 }
 
-static struct ir_inst *cg_string(CTX *ctx, LOC loc, bstr s)
+static struct ir_inst *cg_string(CTX *ctx, LOC loc, char *s)
 {
     return cg_const(ctx, loc, (struct ir_const_val) {
         .type = TYPE_STRING,
@@ -316,7 +316,7 @@ static CR cg_scope_expr(CTX *ctx, struct ast_node *e)
     return cr;
 }
 
-static struct ir_label *lookup_label(CTX *ctx, bstr label)
+static struct ir_label *lookup_label(CTX *ctx, char *label)
 {
     struct ast_sym *sym = scope_lookup(ctx->label_scope, label);
     if (!sym)
@@ -325,7 +325,7 @@ static struct ir_label *lookup_label(CTX *ctx, bstr label)
     return *GET_UNION(AST_SYM, label, sym);
 }
 
-static struct ir_bb *cg_ref_label(CTX *ctx, LOC loc, bstr label)
+static struct ir_bb *cg_ref_label(CTX *ctx, LOC loc, char *label)
 {
     struct ir_label *l = lookup_label(ctx, label);
     if (!l) {
@@ -339,20 +339,19 @@ static struct ir_bb *cg_ref_label(CTX *ctx, LOC loc, bstr label)
     return l->bb;
 }
 
-static void cg_goto_label(CTX *ctx, LOC loc, bstr label)
+static void cg_goto_label(CTX *ctx, LOC loc, char *label)
 {
     bb_add_jump(ctx->bb, loc, cg_ref_label(ctx, loc, label));
     ctx->bb = fn_add_bb(ctx->fn);
 }
 
-static void cg_label(CTX *ctx, LOC loc, bstr label)
+static void cg_label(CTX *ctx, LOC loc, char *label)
 {
     struct ir_bb *bb = fn_add_bb(ctx->fn);
     struct ir_label *l = lookup_label(ctx, label);
     if (l) {
         if (l->defined) {
-            cg_compile_error(ctx, loc, "label '%.*s' already defined",
-                             BSTR_P(label));
+            cg_compile_error(ctx, loc, "label '%s' already defined", label);
             return;
         }
         // This was a forward reference - fix it.
@@ -380,8 +379,8 @@ static void cg_finalize_labels(CTX *ctx)
     for (int n = 0; n < scope->entries_count; n++) {
         struct ir_label *l = *GET_UNION(AST_SYM, label, &scope->entries[n].sym);
         if (!l->defined)
-            cg_compile_error(ctx, l->loc, "label '%.*s' referenced, but not "
-                             "defined", BSTR_P(l->name));
+            cg_compile_error(ctx, l->loc, "label '%s' referenced, but not "
+                             "defined", l->name);
     }
 }
 
@@ -742,7 +741,7 @@ static CR cg_binop(CTX *ctx, struct ast_bin_op *op)
                 cg_compile_error(ctx, loc, "need a name on RHS of '.'");
                 return MAKE_CR_ERROR;
             }
-            bstr member_name = id->id;
+            char *member_name = id->id;
             // xxx maybe types should work too; for now restrict to values
             //     (types could be useful for sizeof/offsetof/nested stuff)
             struct ir_inst *v = NULL;
@@ -776,8 +775,8 @@ static CR cg_binop(CTX *ctx, struct ast_bin_op *op)
             }
             struct ast_sym *sym = scope_lookup(st->scope, member_name);
             if (!sym) {
-                cg_compile_error(ctx, loc, "member '%.*s' doesn't exist",
-                                 BSTR_P(member_name));
+                cg_compile_error(ctx, loc, "member '%s' doesn't exist",
+                                 member_name);
                 return MAKE_CR_ERROR;
             }
             // (must always succeed, because it's the only symbol type allowed)
@@ -844,24 +843,24 @@ struct compound_lit {
 };
 
 struct compound_item {
-    bstr name;
+    char *name;
     // may be NULL for skipped items, instead of pointing to a proper "{}"
     struct ir_inst *val;
 };
 
-static int lit_find_name(struct compound_lit *lit, bstr name)
+static int lit_find_name(struct compound_lit *lit, char *name)
 {
     for (int n = lit->positional_count; n < lit->items_count; n++) {
-        if (bstrcmp(lit->items[n].name, name) == 0)
+        if (strcmp(lit->items[n].name, name) == 0)
             return n;
     }
     return -1;
 }
 
 static void lit_add_item(CTX *ctx, LOC loc, struct compound_lit *lit, int pos,
-                         bstr name, struct ir_inst *val)
+                         char *name, struct ir_inst *val)
 {
-    if (name.len) {
+    if (name && name[0]) {
         int i = lit_find_name(lit, name);
         if (i >= 0) {
             lit->items[i].val = val;
@@ -883,7 +882,7 @@ static void lit_add_item(CTX *ctx, LOC loc, struct compound_lit *lit, int pos,
         while (pos + 1 > lit->positional_count) {
             if (!init)
                 init = cg_init(ctx, loc, val->result_type);
-            struct compound_item skip = {{0}, init};
+            struct compound_item skip = {NULL, init};
             BL_TARRAY_INSERT_AT(lit, lit->items, lit->items_count,
                                 lit->positional_count, skip);
             lit->positional_count++;
@@ -926,7 +925,7 @@ static struct compound_lit *cg_gen_lit(CTX *ctx, LOC loc, int exprs_count,
 
     for (int n = 0; n < exprs_count; n++) {
         struct ast_node *arg = exprs[n];
-        bstr name = {0};
+        char *name = {0};
         int pos = -1;
         LOC exloc = ast_get_loc(arg);
 
@@ -1035,7 +1034,7 @@ static struct ir_inst *gen_varargs(CTX *ctx, LOC loc, int args_count,
         ptr = bb_add_unop(ctx->bb, loc, IR_OP_CONV_TO_G_PTR, TYPE_G_PTR, ptr);
         struct ir_inst *name = cg_string(ctx, loc, item->name);
         struct ir_inst *type = cg_string(ctx, loc,
-                bstr0(type_vararg_mangle(ctx->types, item->val->result_type)));
+                type_vararg_mangle(ctx->types, item->val->result_type));
         va->read[n].def = BB_ADD_INST(ctx->bb, loc, IR_OP_CONSTRUCT_STRUCT, vt,
                                       INST_R3(ptr, name, type));
     }
@@ -1246,7 +1245,7 @@ static CR cg_tuple(CTX *ctx, LOC loc, int exprs_count, struct ast_node **exprs)
     for (int n = 0; n < list->items_count; n++) {
         struct ir_inst *val = list->items[n].val;
         cg_require_complete_type(ctx, val->loc, val->result_type);
-        struct_add(st, val->loc, (bstr) {0}, val->result_type, NULL);
+        struct_add(st, val->loc, "", val->result_type, NULL);
         in->read[n].def = val;
     }
     struct_end(st, true);
@@ -1264,7 +1263,7 @@ static struct ir_type cg_type_tuple(CTX *ctx, LOC loc, int exprs_count,
         LOC tloc = ast_get_loc(exprs[n]);
         struct ir_type t = cg_type_expression(ctx, exprs[n]);
         cg_require_complete_type(ctx, tloc, t);
-        struct_add(st, tloc, (bstr) {0}, t, NULL);
+        struct_add(st, tloc, "", t, NULL);
     }
     struct_end(st, true);
     return MAKE_IR_TYPE(ttuple, st);
@@ -1277,7 +1276,7 @@ static void set_struct_members(CTX *ctx, struct ir_struct_type *st,
     assert(!st->init);
     for (int n = 0; n < body->members_count; n++) {
         struct ast_struct_member m = body->members[n];
-        if (m.name.len && scope_lookup(st->scope, m.name)) {
+        if (m.name && m.name[0] && scope_lookup(st->scope, m.name)) {
             cg_compile_error(ctx, m.loc, "member already defined");
             return;
         }
@@ -1297,14 +1296,14 @@ static void cg_struct(CTX *ctx, struct ast_struct_ *struct_)
     struct ir_struct_type *def = NULL;
     if (prev_sym) {
         if (!TEST_UNION(AST_SYM, type, prev_sym)) {
-            cg_compile_error(ctx, loc, "identifier '%.*s' already "
-                             "defined", BSTR_P(struct_->name));
+            cg_compile_error(ctx, loc, "identifier '%s' already "
+                             "defined", struct_->name);
             return;
         }
         struct ir_type *prev_struct_type = GET_UNION(AST_SYM, type, prev_sym);
         if (!TEST_UNION(IR_TYPE, tstruct, prev_struct_type)) {
-            cg_compile_error(ctx, loc, "identifier '%.*s' redefined "
-                             "as different type", BSTR_P(struct_->name));
+            cg_compile_error(ctx, loc, "identifier '%s' redefined "
+                             "as different type", struct_->name);
             return;
         }
         def = *GET_UNION(IR_TYPE, tstruct, prev_struct_type);
@@ -1340,12 +1339,12 @@ static struct ir_fn_type *fn_signature_to_type(CTX *ctx, bool nested,
                                           { .loc = sig.loc });
     fn->args = struct_start(ctx->types, sig.loc);
     if (nested)
-        struct_add(fn->args, sig.loc, (bstr){0}, TYPE_G_PTR, NULL);
+        struct_add(fn->args, sig.loc, "", TYPE_G_PTR, NULL);
     set_struct_members(ctx, fn->args, &sig.params);
     if (sig.is_vararg)
         fn->vararg = sig.is_c ? IR_VARARG_C : IR_VARARG_NATIVE;
     if (fn->vararg == IR_VARARG_NATIVE)
-        struct_add(fn->args, sig.loc, bstr0("_varargs_"), ctx->types->varargs,
+        struct_add(fn->args, sig.loc, "_varargs_", ctx->types->varargs,
                    NULL);
     struct_end(fn->args, false);
     talloc_steal(fn, fn->args); //???
@@ -1362,8 +1361,8 @@ static void cg_fn(CTX *ctx, struct ast_fn *fn)
     struct ir_fn_decl *def = NULL;
     if (prev_sym) {
         if (!TEST_UNION(AST_SYM, fn_decl, prev_sym)) {
-            cg_compile_error(ctx, loc, "identifier '%.*s' already "
-                             "defined", BSTR_P(fn->name));
+            cg_compile_error(ctx, loc, "identifier '%s' already "
+                             "defined", fn->name);
             return;
         }
         def = *GET_UNION(AST_SYM, fn_decl, prev_sym);
@@ -1454,8 +1453,8 @@ static struct ir_type cg_type_expression(CTX *ctx, struct ast_node *ast)
             struct ast_id *id = GET_UNION(AST, id, ast);
             struct ast_sym *sym = scope_lookup(ctx->local_scope, id->id);
             if (!sym) {
-                cg_compile_error(ctx, loc, "identifier '%.*s' not defined",
-                                 BSTR_P(id->id));
+                cg_compile_error(ctx, loc, "identifier '%s' not defined",
+                                 id->id);
                 return TYPE_ERROR;
             }
             switch (sym->type) {
@@ -1525,8 +1524,8 @@ static CR cg_expression(CTX *ctx, struct ast_node *ast)
             //      in case of CTFE: const stuff?
             struct ast_sym *sym = scope_lookup(ctx->local_scope, id->id);
             if (!sym) {
-                cg_compile_error(ctx, loc, "identifier '%.*s' not defined",
-                                 BSTR_P(id->id));
+                cg_compile_error(ctx, loc, "identifier '%s' not defined",
+                                 id->id);
                 return MAKE_CR_ERROR;
             }
             // @ALL ast_sym_type
@@ -1559,7 +1558,7 @@ static CR cg_expression(CTX *ctx, struct ast_node *ast)
             // xxx allow shadowing out-of-function stuff (e.g. global variables)
             if (scope_lookup(ctx->local_scope, var->name)) {
                 cg_compile_error(ctx, loc,
-                        "variable '%.*s' already defined", BSTR_P(var->name));
+                        "variable '%s' already defined", var->name);
                 return MAKE_CR_ERROR;
             }
             if (!var->type && !var->init) {
@@ -1763,7 +1762,7 @@ static void cg_function_prologue(CTX *ctx)
     for (int n = 0; n < type->args->members_count; n++) {
         struct ir_struct_member *m = type->args->members[n];
         // Obviously only named arguments can be accessed.
-        if (m->name.len) {
+        if (m->name && m->name[0]) {
             cg_require_complete_type(ctx, m->loc, m->type);
             struct ir_var *v = fn_add_var(ctx->fn, m->loc, m->type);
             struct ir_inst *val = BB_ADD_INST(ctx->bb, m->loc, IR_OP_GETARG,
@@ -1869,7 +1868,7 @@ struct ir_unit *bl_cg_expr(struct ast_node *ast)
     // Turn it into something that can be compiled as program.
     // Add the expression as function, and call it from main().
     struct ir_fn_decl *fnd =
-        unit_define_function(unit, fn, (struct ir_link_name) { bstr0("expr") });
+        unit_define_function(unit, fn, (struct ir_link_name) { "expr" });
     CTX *ctx = alloc_ctx(unit, unit->symbols);
     ctx->fn->type = ctx->types->c_main;
     cg_function_prologue(ctx);
@@ -1878,15 +1877,15 @@ struct ir_unit *bl_cg_expr(struct ast_node *ast)
     bb_add_nt_unop(ctx->bb, fn->loc, IR_OP_RET, i0);
     struct ir_function *main_fn = finalize_function(ctx);
     unit_define_function(unit, main_fn,
-        (struct ir_link_name) { bstr0("main"), .visible = true, .is_c = true });
+        (struct ir_link_name) { "main", .visible = true, .is_c = true });
 
     return unit;
 }
 
-struct ast_sym *scope_lookup(struct ir_scope *scope, bstr name)
+struct ast_sym *scope_lookup(struct ir_scope *scope, char *name)
 {
     for (int n = 0; n < scope->entries_count; n++) {
-        if (bstrcmp(scope->entries[n].name, name) == 0)
+        if (strcmp(scope->entries[n].name, name) == 0)
             return &scope->entries[n].sym;
     }
     if (scope->next)
@@ -1894,7 +1893,7 @@ struct ast_sym *scope_lookup(struct ir_scope *scope, bstr name)
     return NULL;
 }
 
-void scope_add(struct ir_scope *scope, bstr name, struct ast_sym entry)
+void scope_add(struct ir_scope *scope, char *name, struct ast_sym entry)
 {
     struct scope_entry e = { name, entry };
     BL_TARRAY_APPEND(scope, scope->entries, scope->entries_count, e);

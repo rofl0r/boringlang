@@ -662,7 +662,7 @@ static void collect_upvalues(struct fn_info *info, struct ir_function *cur)
                 struct ir_var *v = in->var;
                 if (v->fn == info->fn && !info->map_var[v->index]) {
                     info->map_var[v->index] =
-                        struct_add(info->st, v->loc, bstr0(""), v->ptr_type,
+                        struct_add(info->st, v->loc, "", v->ptr_type,
                                    NULL);
                 }
             }
@@ -684,7 +684,7 @@ static void handle_nested_calls(struct ir_function *fn,
                                      fn->vars_count);
     if (prev_info) {
         // Possibly not needed, but it's simpler to always set this.
-        struct_add(info.st, fn->loc, bstr0(""), prev_info->st_ptr_type, NULL);
+        struct_add(info.st, fn->loc, "", prev_info->st_ptr_type, NULL);
     }
     // collect upvalues from direct children
     collect_upvalues(&info, fn);

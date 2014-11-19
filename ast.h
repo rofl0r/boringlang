@@ -2,11 +2,10 @@
 #define BL_AST_H
 
 #include "lex.h"
-#include "bstr.h"
 
 struct ast_id {
     source_pos loc;
-    bstr id;
+    char *id;
 };
 
 struct ast_lit {
@@ -16,9 +15,9 @@ struct ast_lit {
 
 struct ast_def_macro {
     source_pos loc;
-    bstr name;
+    char *name;
     int params_count;
-    bstr *params;
+    char **params;
     bool no_params;
     bool is_vararg;
     struct ast_node *contents;
@@ -45,7 +44,7 @@ struct ast_tuple {
 
 struct ast_var {
     source_pos loc;
-    bstr name;
+    char *name;
     struct ast_node *type;      // can be NULL
     struct ast_node *init;      // can be NULL
 };
@@ -143,7 +142,7 @@ struct ast_call {
 
 struct ast_struct_member {
     source_pos loc;
-    bstr name;                  // can be empty for function params
+    char *name;                  // can be empty for function params
     struct ast_node *type;
     struct ast_node *init;      // can be NULL
 };
@@ -172,14 +171,14 @@ struct ast_stackclosure_type {
 
 struct ast_fn {
     source_pos loc;
-    bstr name;
+    char *name;
     struct ast_fn_signature sig;
     struct ast_node *body;              // can be NULL
 };
 
 struct ast_struct_ {
     source_pos loc;
-    bstr name;
+    char *name;
     struct ast_struct_body *body;       // can be NULL
 };
 
@@ -209,12 +208,12 @@ struct ast_block {
 
 struct ast_label {
     source_pos loc;
-    bstr name;
+    char *name;
 };
 
 struct ast_goto_ {
     source_pos loc;
-    bstr label;
+    char *label;
 };
 
 enum ast_node_type {

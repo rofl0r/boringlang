@@ -39,14 +39,14 @@ static char *varray_to_string(void *talloc, struct ir_array_const *varray)
 
 static const char hex[] = "0123456789ABCDEF";
 
-char *string_unparse(void *talloc, bstr s)
+char *string_unparse(void *talloc, char *s)
 {
     char *res = NULL;
     int count = 0;
 #define APPEND(c) BL_TARRAY_APPEND(talloc, res, count, (c))
     APPEND('"');
-    for (int n = 0; n < s.len; n++) {
-        unsigned char c = s.start[n];
+    for (int n = 0; s && s[n]; n++) {
+        unsigned char c = s[n];
         if (c < 32 || c > 127) {
             APPEND('\\');
             // Use octal, because '\xNN' is ambiguous with '\xNNNN' in C.
@@ -193,8 +193,8 @@ bool const_bit_equals(struct ir_const_val v1, struct ir_const_val v2)
     case IR_TYPE_tstackclosure:
     case IR_TYPE_tslice:
         if (val1->type == VALUE_vstring)
-            return bstrcmp(*GET_UNION(VALUE, vstring, val1),
-                           *GET_UNION(VALUE, vstring, val2)) == 0;
+            return strcmp(*GET_UNION(VALUE, vstring, val1),
+                          *GET_UNION(VALUE, vstring, val2)) == 0;
         // xxx: unknown representation
         assert(val1->type == VALUE_vempty);
         return true;
@@ -234,7 +234,9 @@ void const_hash(uint32_t *hash, struct ir_const_val v)
     case IR_TYPE_tstackclosure:
     case IR_TYPE_tslice:
         if (val->type == VALUE_vstring) {
-            hash_bstr(hash, *GET_UNION(VALUE, vstring, val));
+            char *s = *GET_UNION(VALUE, vstring, val);
+            if (s)
+                hash_string(hash, s);
             return;
         }
         assert(val->type == VALUE_vempty);

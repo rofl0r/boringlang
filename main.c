@@ -3,35 +3,35 @@
 #include "lex.h"
 #include "ast.h"
 #include "ir.h"
-#include "bstr.h"
 #include "utils.h"
 
 static int gres = 0;
 
-static bstr read_file(void *talloc_ctx, const char *filename)
+static char *read_file(void *talloc_ctx, const char *filename)
 {
-    bstr res = {0};
+    char *res = NULL;
     FILE *f = fopen(filename, "r");
     if (!f)
         goto error_exit;
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
-    res = (bstr) {talloc_size(talloc_ctx, size), size};
-    fread(res.start, res.len, 1, f);
+    res = talloc_size(talloc_ctx, size + 1);
+    fread(res, size, 1, f);
+    res[size] = '\0';
     if (fclose(f) != 0)
         goto error_exit;
     return res;
 
 error_exit:
     fprintf(stderr, "couldn't read file '%s'!\n", filename);
-    talloc_free(res.start);
-    return (bstr) {0};
+    talloc_free(res);
+    return NULL;
 }
 
-static void dump_tokens(bstr src, const char *file)
+static void dump_tokens(char *src, char *file)
 {
-    struct lexer *lex = lexer_new(src, bstr0(file));
+    struct lexer *lex = lexer_new(src, file);
     do {
         lexer_next(lex);
         char *s = full_token_string(lex->token);
@@ -41,7 +41,7 @@ static void dump_tokens(bstr src, const char *file)
     talloc_free(lex);
 }
 
-static struct ast_node *parse_ast(bstr data, bstr name)
+static struct ast_node *parse_ast(char *data, char *name)
 {
     struct lexer *lex = lexer_new(data, name);
     lexer_next(lex);
@@ -72,14 +72,14 @@ static char *ast_to_string(struct ast_node *node, int flags)
     return res;
 }
 
-static void test_syntax_ast(bstr a, bstr b, bool expect_equal)
+static void test_syntax_ast(char *a, char *b, bool expect_equal)
 {
-    struct ast_node *at = parse_ast(a, bstr0("a"));
-    struct ast_node *bt = parse_ast(b, bstr0("b"));
+    struct ast_node *at = parse_ast(a, "a");
+    struct ast_node *bt = parse_ast(b, "b");
     if (!at || !bt) {
         fprintf(stderr, "one could not be parsed!\n");
-        fprintf(stderr, "a: %.*s\n", BSTR_P(a));
-        fprintf(stderr, "b: %.*s\n", BSTR_P(b));
+        fprintf(stderr, "a: %s\n", a);
+        fprintf(stderr, "b: %s\n", b);
         exit(1);
     } else {
         char *sa = ast_to_string(at, DUMP_AST_NOLOC);
@@ -102,45 +102,58 @@ static void test_syntax_ast(bstr a, bstr b, bool expect_equal)
     talloc_free(bt);
 }
 
-static void parse_prec_test(bstr data)
+static char *get_line(void *tmp, char **s)
+{
+    char *res = NULL;
+    char *next = strchr(*s, '\n');
+    if (next) {
+        res = talloc_strndup(tmp, *s, next - *s);
+        *s = next + 1;
+    } else {
+        res = talloc_strdup(tmp, *s);
+        *s = NULL;
+    }
+    return res;
+}
+
+static void parse_prec_test(char *data)
 {
     void *tmp = talloc_new(NULL);
     int state = 0;
     char *strings[3] = {0};
-    while (data.len) {
-        bstr line = bstr_getline(data, &data);
-        if (bstrcmp0(line, "#syntax-a:") == 0) {
+    while (data) {
+        char *line = get_line(tmp, &data);
+        if (strcmp(line, "#syntax-a:") == 0) {
             state = 1;
-        } else if (bstrcmp0(line, "#syntax-b:") == 0) {
+        } else if (strcmp(line, "#syntax-b:") == 0) {
             state = 2;
-        } else if (bstrcmp0(line, "#test-eq") == 0) {
-            test_syntax_ast(bstr0(strings[1]), bstr0(strings[2]), true);
+        } else if (strcmp(line, "#test-eq") == 0) {
+            test_syntax_ast(strings[1], strings[2], true);
             talloc_free(strings[1]);
             talloc_free(strings[2]);
             strings[1] = strings[2] = NULL;
             state = 0;
-        } else if (bstrcmp0(line, "#test-neq") == 0) {
-            test_syntax_ast(bstr0(strings[1]), bstr0(strings[2]), false);
+        } else if (strcmp(line, "#test-neq") == 0) {
+            test_syntax_ast(strings[1], strings[2], false);
             talloc_free(strings[1]);
             talloc_free(strings[2]);
             strings[1] = strings[2] = NULL;
             state = 0;
-        } else if (bstr_startswith0(line, "#")) {
-            fprintf(stderr, "not understood: '%.*s'\n", BSTR_P(line));
+        } else if (line[0] == '#') {
+            fprintf(stderr, "not understood: '%s'\n", line);
             exit(1);
             state = 0;
         } else {
-            strings[state] = talloc_strndup_append_buffer(strings[state],
-                                                          line.start, line.len);
+            strings[state] = talloc_strdup_append_buffer(strings[state], line);
             talloc_steal(tmp, strings[state]);
         }
     }
     talloc_free(tmp);
 }
 
-static void dump_cg(bstr src, const char *file)
+static void dump_cg(char *src, char *file)
 {
-    struct ast_node *ast = parse_ast(src, bstr0(file));
+    struct ast_node *ast = parse_ast(src, file);
     gres = 1;
     if (ast) {
         dump_ast(stdout, ast, 0);
@@ -154,9 +167,9 @@ static void dump_cg(bstr src, const char *file)
     }
 }
 
-static void dump_cg_o(bstr src, const char *file)
+static void dump_cg_o(char *src, char *file)
 {
-    struct ast_node *ast = parse_ast(src, bstr0(file));
+    struct ast_node *ast = parse_ast(src, file);
     gres = 1;
     if (ast) {
         dump_ast(stdout, ast, 0);
@@ -174,9 +187,9 @@ static void dump_cg_o(bstr src, const char *file)
     }
 }
 
-static int dump_cg_c(bstr src, const char *file)
+static int dump_cg_c(char *src, char *file)
 {
-    struct ast_node *ast = parse_ast(src, bstr0(file));
+    struct ast_node *ast = parse_ast(src, file);
     if (!ast)
         return 1;
     struct ir_unit *un = bl_cg_expr(ast);
@@ -229,30 +242,32 @@ int main(int argc, char **argv)
     }
 
     if (strcmp(cmd, "parse_arg") == 0) {
-        struct ast_node *ast = parse_ast(bstr0(nextarg), bstr0(cmd));
+        struct ast_node *ast = parse_ast(nextarg, cmd);
         dump_ast(stdout, ast, 0);
         talloc_free(ast);
         goto done;
     } else if (strcmp(cmd, "tokens_arg") == 0) {
-        dump_tokens(bstr0(nextarg), cmd);
+        dump_tokens(nextarg, cmd);
         goto done;
     } else if (strcmp(cmd, "cg_arg") == 0) {
-        dump_cg(bstr0(nextarg), cmd);
+        dump_cg(nextarg, cmd);
         goto done;
     } else if (strcmp(cmd, "cg_arg_o") == 0) {
-        dump_cg_o(bstr0(nextarg), cmd);
+        dump_cg_o(nextarg, cmd);
         goto done;
     } else if (strcmp(cmd, "cg_arg_c") == 0) {
-        gres = dump_cg_c(bstr0(nextarg), cmd);
+        gres = dump_cg_c(nextarg, cmd);
         goto done;
     }
 
-    bstr file_data = read_file(ctx, nextarg);
+    char *file_data = read_file(ctx, nextarg);
+    if (!file_data)
+        goto error_exit;
 
     if (strcmp(cmd, "tokens") == 0) {
         dump_tokens(file_data, nextarg);
     } else if (strcmp(cmd, "parse") == 0) {
-        struct ast_node *ast = parse_ast(file_data, bstr0(nextarg));
+        struct ast_node *ast = parse_ast(file_data, nextarg);
         dump_ast(stdout, ast, 0);
         talloc_free(ast);
     } else if (strcmp(cmd, "cg") == 0) {

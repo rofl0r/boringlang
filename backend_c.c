@@ -181,13 +181,13 @@ static char *def_array_type(CTX *ctx, struct ir_array_type *at)
 }
 
 static void write_fn_type(CTX *ctx, struct ir_fn_type *fnt, bool as_ptr,
-                          bstr name)
+                          char *name)
 {
     fprintf(ctx->f, "%s ", ret_type(ctx, fnt->ret_type));
     if (as_ptr) {
-        fprintf(ctx->f, "(*%.*s)", BSTR_P(name));
+        fprintf(ctx->f, "(*%s)", name);
     } else {
-        fprintf(ctx->f, "%.*s", BSTR_P(name));
+        fprintf(ctx->f, "%s", name);
     }
     fprintf(ctx->f, "(");
     for (int n = 0; n < fnt->args->members_count; n++) {
@@ -226,7 +226,7 @@ static char *def_fn_type(CTX *ctx, struct ir_fn_type *fnt)
     }
     add_mangle(ctx, fnt, m);
     fprintf(ctx->f, "typedef ");
-    write_fn_type(ctx, fnt, true, bstr0(m));
+    write_fn_type(ctx, fnt, true, m);
     fprintf(ctx->f, ";\n");
     return m;
 }
@@ -235,12 +235,12 @@ struct name_temp {
     char tmp[20];
 };
 
-static bstr member_name(struct ir_struct_member *m, struct name_temp *t)
+static char *member_name(struct ir_struct_member *m, struct name_temp *t)
 {
-    if (m->name.len)
+    if (m->name && m->name[0])
         return m->name;
     snprintf(t->tmp, sizeof(t->tmp), "m%d", m->index);
-    return bstr0(t->tmp);
+    return t->tmp;
 }
 
 static void write_struct(CTX *ctx, struct ir_struct_type *st, char *name)
@@ -259,9 +259,9 @@ static void write_struct(CTX *ctx, struct ir_struct_type *st, char *name)
     for (int n = 0; n < st->members_count; n++) {
         struct ir_struct_member *m = st->members[n];
         struct name_temp t;
-        bstr mname = member_name(m, &t);
+        char *mname = member_name(m, &t);
         set_loc(ctx, m->loc);
-        wf(ctx, "%s %.*s;", def_type(ctx, m->type), BSTR_P(mname));
+        wf(ctx, "%s %s;", def_type(ctx, m->type), mname);
     }
     indent_out(ctx);
     wf(ctx, "};");
@@ -281,10 +281,10 @@ static char *def_tuple(CTX *ctx, struct ir_struct_type *st, bool add_names)
     for (int n = 0; n < st->members_count; n++) {
         struct ir_struct_member *sm = st->members[n];
         mangle_append_sub(&m, def_type(ctx, sm->type));
-        assert(add_names == (sm->name.len > 0));
-        if (sm->name.len)
-            m = talloc_asprintf_append_buffer(m, "n%zd_%.*s_", sm->name.len,
-                                              BSTR_P(sm->name));
+        assert(add_names == (sm->name[0]));
+        if (sm->name)
+            m = talloc_asprintf_append_buffer(m, "n%zd_%s_", strlen(sm->name),
+                                              sm->name);
     }
     if (use_anon_mangle_for_tuples) {
         char *new_mangle = HT_GET_DEF(dstr, dstr, ctx->tuple_abbrev, m, NULL);
@@ -310,7 +310,7 @@ static char *def_struct(CTX *ctx, struct ir_struct_type *st)
     // uses the same struct, they must use the same name (and have
     // the same members and so on).
     // xxx handle structs nested inside functions
-    m = bstrdup0(ctx, st->name);
+    m = talloc_strdup(ctx, st->name);
     add_mangle(ctx, st, m);
     write_struct(ctx, st, m);
     return m;
@@ -414,21 +414,21 @@ static char *def_nested_fn(CTX *ctx, struct ir_function *fn)
     add_mangle(ctx, fn, m);
     do_fn_types(ctx, fn->type);
     fprintf(ctx->f, "static ");
-    write_fn_type(ctx, fn->type, false, bstr0(m));
+    write_fn_type(ctx, fn->type, false, m);
     fprintf(ctx->f, ";\n");
     return m;
 }
 
 static char *link_name(CTX *ctx, struct ir_link_name name)
 {
-    return talloc_asprintf(ctx, "%s%s%.*s",
+    return talloc_asprintf(ctx, "%s%s%s",
                            // For now, out all functions not meant to be
                            // visible by C code into their own namespace.
                            name.is_c ? "" : (MANGLE_PREFIX "f_"),
                            // invisible => make name different from possible
                            //              same-named global functions?
                            name.visible ? "" : "inv_",
-                           BSTR_P(name.name));
+                           name.name);
 }
 
 static char *def_fn(CTX *ctx, struct ir_fn_decl *fn)
@@ -444,7 +444,7 @@ static char *def_fn(CTX *ctx, struct ir_fn_decl *fn)
     do_fn_types(ctx, fn->type);
     if (!fn->name.visible)
         fprintf(ctx->f, "static ");
-    write_fn_type(ctx, fn->type, false, bstr0(m));
+    write_fn_type(ctx, fn->type, false, m);
     fprintf(ctx->f, ";\n");
     return m;
 }
@@ -479,8 +479,8 @@ static void write_const(CTX *ctx, struct ir_const_val v)
         if (TEST_UNION0(VALUE, vempty, &v.value)) {
             fprintf(ctx->f, "{0}");
         } else if (type_equals(v.type, TYPE_STRING)) {
-            bstr raw = *GET_UNION(VALUE, vstring, &v.value);
-            fprintf(ctx->f, "{ %s, %zd }", s, raw.len);
+            char *raw = *GET_UNION(VALUE, vstring, &v.value);
+            fprintf(ctx->f, "{ %s, %zd }", s, raw ? strlen(raw) : 0);
         } else {
             assert(false);
         }
@@ -590,8 +590,7 @@ static void write_inst(CTX *ctx, struct ir_inst *in, bool inner)
             break;
         case IR_OP_GET_STRUCT_MEMBER_PTR: {
             struct name_temp t;
-            bstr name = member_name(in->struct_member, &t);
-            P(ctx, "&(%s->%.*s)", R0, BSTR_P(name));
+            P(ctx, "&(%s->%s)", R0, member_name(in->struct_member, &t));
             break;
         }
         case IR_OP_CONSTRUCT_STRUCT: {
@@ -604,8 +603,7 @@ static void write_inst(CTX *ctx, struct ir_inst *in, bool inner)
         }
         case IR_OP_GET_STRUCT_MEMBER: {
             struct name_temp t;
-            bstr name = member_name(in->struct_member, &t);
-            P(ctx, "%s.%.*s", R0, BSTR_P(name));
+            P(ctx, "%s.%s", R0, member_name(in->struct_member, &t));
             break;
         }
         case IR_OP_SET_STRUCT_MEMBER: {
@@ -867,7 +865,7 @@ static void gen_fn(CTX *ctx, struct ir_function *fn, char *name, bool visible)
     set_loc(ctx, fn->loc);
     if (!visible)
         fprintf(ctx->f, "static ");
-    write_fn_type(ctx, fn->type, false, bstr0(name));
+    write_fn_type(ctx, fn->type, false, name);
     wf(ctx, " {");
     indent_in(ctx);
     for (int n = 0; n < fn->vars_count; n++) {

@@ -3,7 +3,6 @@
 
 #include "union.h"
 #include "lex.h"
-#include "bstr.h"
 
 // @ALL ir_type_type
 enum ir_type_type {
@@ -70,7 +69,7 @@ extern const struct ir_type TYPE_STRING;
 
 struct ir_struct_member {
     source_pos loc;
-    bstr name;                  // empty name = anonymous member
+    char *name;                  // empty name = anonymous member
     int index;
     struct ir_type type;
     // For actual structs, init is always set.
@@ -81,7 +80,7 @@ struct ir_struct_member {
 
 struct ir_struct_type {
     source_pos loc;
-    bstr name;
+    char *name;
     bool defined;                       // false if forward-declared
     int members_count;
     struct ir_struct_member **members;
@@ -157,10 +156,10 @@ struct ir_type type_common(struct ir_type t1, struct ir_type t2);
 
 struct ir_struct_type *struct_start(struct ir_types *ctx, LOC loc);
 struct ir_struct_member *struct_add(struct ir_struct_type *st, LOC m_loc,
-                                    bstr m_name, struct ir_type m_type,
+                                    char *m_name, struct ir_type m_type,
                                     struct ir_const_val *m_init);
 void struct_end(struct ir_struct_type *st, bool add_init);
 struct ir_struct_member *struct_find_member(struct ir_struct_type *t,
-                                            bstr name);
+                                            char *name);
 
 #endif

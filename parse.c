@@ -63,10 +63,10 @@ static struct op_map bin_ops[] = {
     {0}
 };
 
-static struct op_map *find_op_str(const struct op_map map[], bstr op)
+static struct op_map *find_op_str(const struct op_map map[], char *op)
 {
     for (const struct op_map *m = map; m->tok; m++) {
-        if (bstrcmp0(op, m->tok) == 0)
+        if (strcmp(op, m->tok) == 0)
             return (struct op_map *)m;
     }
     return NULL;
@@ -89,7 +89,7 @@ static struct ast_node *parse_terminal(struct lexer *lex)
 {
     source_pos start = lex->token.pos;
     if (lexer_peek(lex, TOKEN_ID)) {
-        bstr name = lexer_eat_id(lex);
+        char *name = lexer_eat_id(lex);
         return NEW_NODE(lex, id, {start, name});
     } else if (lexer_peek(lex, TOKEN_LIT)) {
         struct lex_const value = lexer_eat_lit(lex);
@@ -137,7 +137,7 @@ static struct ast_struct_member parse_decl(struct lexer *lex, bool fn_sig)
     source_pos loc = lex->token.pos;
     struct lexer_state_backup prev_state;
     lexer_state_backup(lex, &prev_state);
-    bstr name = lexer_eat_id(lex);
+    char *name = lexer_eat_id(lex);
     struct ast_node *type = NULL;
     struct ast_node *init = NULL;
     if (lexer_try_eat_tok(lex, ":")) {
@@ -147,7 +147,7 @@ static struct ast_struct_member parse_decl(struct lexer *lex, bool fn_sig)
         // (Basically a manual special-cased one-token lookahead.)
         // xxx this is ugly (change grammar or parsing mechanism)
         lexer_state_restore(lex, &prev_state);
-        name = (struct bstr) {0};
+        name = "";
         type = parse_expr(lex, PREC_TERMINAL);
     }
     if (lexer_try_eat_tok(lex, "="))
@@ -160,7 +160,7 @@ static struct ast_fn_signature parse_fn_signature(struct lexer *lex)
     struct ast_fn_signature sig = { .loc = lex->token.pos };
     if (lexer_try_eat_tok(lex, "{")) {
         if (lexer_peek(lex, TOKEN_ID)) {
-            if (bstrcmp0(lex->token.value, "C") != 0)
+            if (strcmp(lex->token.value, "C") != 0)
                 lexer_error_at(lex, lex->token.pos,
                             "'C' or '}' expected");
             sig.is_c = true;
@@ -283,18 +283,18 @@ static struct ast_node *parse_expr_opt(struct lexer *lex, int prec)
             return NEW_NODE(lex, ret, {start, res});
         }
         if (lexer_try_eat_tok(lex, "goto")) {
-            bstr name = lexer_eat_id(lex);
+            char *name = lexer_eat_id(lex);
             return NEW_NODE(lex, goto_, {start, name});
         }
         if (lexer_try_eat_tok(lex, "@")) {
             // xxx this sucks; label should always be able to start a new
             //     expression (currently requires adding ";")
-            bstr name = lexer_eat_id(lex);
+            char *name = lexer_eat_id(lex);
             lexer_eat_tok(lex, ":");
             return NEW_NODE(lex, label, {start, name});
         }
         if (lexer_try_eat_tok(lex, "struct")) {
-            bstr name = lexer_eat_id(lex);
+            char *name = lexer_eat_id(lex);
             struct ast_struct_body *body = NULL;
             if (lexer_try_eat_tok(lex, "{")) {
                 body = talloc_struct(lex, struct ast_struct_body,
@@ -316,7 +316,7 @@ static struct ast_node *parse_expr_opt(struct lexer *lex, int prec)
         if (lexer_try_eat_tok(lex, "fn")) {
             if (lexer_peek(lex, TOKEN_ID)) {
                 // Function declaration.
-                bstr name = lexer_eat_id(lex);
+                char *name = lexer_eat_id(lex);
                 struct ast_fn_signature sig = parse_fn_signature(lex);
                 struct ast_node *body = parse_block_opt(lex);
                 return NEW_NODE(lex, fn, {start, name, sig, body});
@@ -349,7 +349,7 @@ static struct ast_node *parse_expr_opt(struct lexer *lex, int prec)
                         macro.is_vararg = true;
                         break;
                     }
-                    bstr p = lexer_eat_id(lex);
+                    char *p = lexer_eat_id(lex);
                     BL_TARRAY_APPEND(lex, macro.params, macro.params_count, p);
                 } while (lexer_try_eat_tok(lex, ","));
                 lexer_eat_tok(lex, ")");
@@ -557,7 +557,7 @@ static void dump_struct_body(struct dump_ctx *ctx, const char *role,
         struct ast_struct_member member = body->members[n];
         ctx->level++;
         pre(ctx);
-        fprintf(ctx->out, "[member] '%.*s'", BSTR_P(member.name));
+        fprintf(ctx->out, "[member] '%s'", member.name);
         fin(ctx, member.loc);
         dump_node(ctx, "type", member.type);
         dump_node(ctx, "init", member.init);
@@ -592,7 +592,7 @@ static void dump_node(struct dump_ctx *ctx, const char *role,
     switch (node->type) {
         case AST_id: {
             struct ast_id *id = GET_UNION(AST, id, node);
-            fprintf(ctx->out, "[id] %.*s", BSTR_P(id->id));
+            fprintf(ctx->out, "[id] %s", id->id);
             fin(ctx, id->loc);
             break;
         }
@@ -606,18 +606,18 @@ static void dump_node(struct dump_ctx *ctx, const char *role,
         }
         case AST_def_macro: {
             struct ast_def_macro *macro = GET_UNION(AST, def_macro, node);
-            fprintf(ctx->out, "[macro] %.*s no_params=%d is_vararg=%d",
-                    BSTR_P(macro->name), macro->no_params, macro->is_vararg);
+            fprintf(ctx->out, "[macro] %s no_params=%d is_vararg=%d",
+                    macro->name, macro->no_params, macro->is_vararg);
             fin(ctx, macro->loc);
             if (!macro->no_params) {
                 ctx->level++;
                 pre(ctx);
                 fprintf(ctx->out, "{params} ");
                 for (int n = 0; n < macro->params_count; n++) {
-                    bstr p = macro->params[n];
+                    char *p = macro->params[n];
                     if (n > 0)
                         fprintf(ctx->out, ", ");
-                    fprintf(ctx->out, "%.*s", BSTR_P(p));
+                    fprintf(ctx->out, "%s", p);
                 }
                 fprintf(ctx->out, "\n");
                 ctx->level--;
@@ -649,7 +649,7 @@ static void dump_node(struct dump_ctx *ctx, const char *role,
         }
         case AST_var: {
             struct ast_var *var = GET_UNION(AST, var, node);
-            fprintf(ctx->out, "[var] %.*s", BSTR_P(var->name));
+            fprintf(ctx->out, "[var] %s", var->name);
             fin(ctx, var->loc);
             dump_node(ctx, "type", var->type);
             dump_node(ctx, "init", var->init);
@@ -710,7 +710,7 @@ static void dump_node(struct dump_ctx *ctx, const char *role,
         }
         case AST_fn: {
             struct ast_fn *fn = GET_UNION(AST, fn, node);
-            fprintf(ctx->out, "[fn] '%.*s'", BSTR_P(fn->name));
+            fprintf(ctx->out, "[fn] '%s'", fn->name);
             fin(ctx, fn->loc);
             dump_fn_sig(ctx, fn->sig);
             dump_node(ctx, "body", fn->body);
@@ -718,7 +718,7 @@ static void dump_node(struct dump_ctx *ctx, const char *role,
         }
         case AST_struct_: {
             struct ast_struct_ *struct_ = GET_UNION(AST, struct_, node);
-            fprintf(ctx->out, "[struct] '%.*s'", BSTR_P(struct_->name));
+            fprintf(ctx->out, "[struct] '%s'", struct_->name);
             fin(ctx, struct_->loc);
             if (struct_->body)
                 dump_struct_body(ctx, "body", struct_->body);
@@ -759,13 +759,13 @@ static void dump_node(struct dump_ctx *ctx, const char *role,
         }
         case AST_label: {
             struct ast_label *label = GET_UNION(AST, label, node);
-            fprintf(ctx->out, "[label] '%.*s'", BSTR_P(label->name));
+            fprintf(ctx->out, "[label] '%s'", label->name);
             fin(ctx, label->loc);
             break;
         }
         case AST_goto_: {
             struct ast_goto_ *goto_ = GET_UNION(AST, goto_, node);
-            fprintf(ctx->out, "[goto] '%.*s'", BSTR_P(goto_->label));
+            fprintf(ctx->out, "[goto] '%s'", goto_->label);
             fin(ctx, goto_->loc);
             break;
         }

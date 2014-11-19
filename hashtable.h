@@ -6,7 +6,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
-#include "bstr.h"
 
 enum {
     HASH_INVALID = 0u, // hash value used to mark deleted entries
@@ -40,21 +39,21 @@ static inline void hash_ptr(uint32_t *hash, void *ptr)
     }
 }
 
-static inline void hash_bstr(uint32_t *hash, bstr str)
+static inline void hash_bits(uint32_t *hash, const void *ptr, size_t len)
 {
     // just something lame
-    for (size_t n = 0; n < str.len; n++)
-        *hash = ((*hash << 3) | (*hash >> 29)) ^ str.start[n];
+    for (size_t n = 0; n < len; n++)
+        *hash = ((*hash << 3) | (*hash >> 29)) ^ ((char *)ptr)[n];
 }
 
 static inline void hash_string(uint32_t *hash, const char *str)
 {
-    hash_bstr(hash, bstr0(str));
+    hash_bits(hash, str, strlen(str));
 }
 
 static inline void hash_double_bit(uint32_t *hash, double v)
 {
-    hash_bstr(hash, (struct bstr) { (char*)&v, sizeof(v) });
+    hash_bits(hash, &v, sizeof(v));
 }
 
 enum hashdata_type {
@@ -62,7 +61,6 @@ enum hashdata_type {
     HT_DATA_dint,       // type int (we assume intptr_t is big enough)
     HT_DATA_dptr,       // pointer, and the raw pointer value is hashed
     HT_DATA_dstr,       // const char*
-    HT_DATA_dbstr,      // bstr
     HT_DATA_dcustomptr, // pointer, subject to custom_key_* functions
     HT_DATA_dcustom,    // anything, must fit into hashdata
 };
@@ -72,7 +70,6 @@ union hashdata {
     int dint;
     void *dptr;
     char *dstr;
-    bstr dbstr;
     void *dcustomptr;
     char dcustom;
 };
@@ -136,9 +133,6 @@ static inline uint32_t ht_key_hash(struct hashtable *ht, void *key)
         case HT_DATA_dstr:
             hash_string(&hash, *(char**)key);
             break;
-        case HT_DATA_dbstr:
-            hash_bstr(&hash, *(bstr*)key);
-            break;
         case HT_DATA_dcustomptr:
             hash = ht->custom_key_hash(ht->custom_key_ctx, *(void**)key);
             break;
@@ -162,8 +156,6 @@ static inline bool ht_key_equals(struct hashtable *ht, void *key1, void *key2)
             return *(void**)key1 == *(void**)key2;
         case HT_DATA_dstr:
             return strcmp(*(char**)key1, *(char**)key2) == 0;
-        case HT_DATA_dbstr:
-            return bstrcmp(*(bstr*)key1, *(bstr*)key2) == 0;
         case HT_DATA_dcustomptr:
             return ht->custom_key_equals(ht->custom_key_ctx, *(void**)key1,
                                          *(void**)key2);
