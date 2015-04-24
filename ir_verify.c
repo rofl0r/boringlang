@@ -175,6 +175,8 @@ static void verify_const(struct ir_types *types, struct ir_const_val c)
     case IR_TYPE_tstackclosure:
     case IR_TYPE_tslice:
         assert(rv->type == VALUE_vstring || rv->type == VALUE_vempty);
+        if (rv->type == VALUE_vstring)
+            assert(*GET_UNION(VALUE, vstring, rv));
         return;
     default: assert(false);
     }

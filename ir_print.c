@@ -113,7 +113,8 @@ static char *inst_str(void *ctx, struct ir_function *fn, struct ir_inst *in)
         {
             struct ir_var *v = in->var;
             return talloc_asprintf(ctx, "%s %d%s '%s'", ins, v->index,
-                                   v->fn == fn ? "" : " [non-local]", v->name);
+                                   v->fn == fn ? "" : " [non-local]",
+                                   v->name ? v->name : "-");
         }
         case IR_OP_GET_STRUCT_MEMBER_PTR:
         case IR_OP_GET_STRUCT_MEMBER:
@@ -187,7 +188,7 @@ void dump_fn(FILE *f, struct ir_function *fn)
     for (int n = 0; n < fn->vars_count; n++) {
         struct ir_var *var = fn->vars[n];
         fprintf(f, "   %d: %s '%s' %s\n", dump_varid(fn, var),
-                type_str(t, var->type), var->name,
+                type_str(t, var->type), var->name ? var->name : "-",
                 loc_str(t, var->loc));
     }
     int in_nr = 0;

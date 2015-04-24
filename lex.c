@@ -30,7 +30,8 @@ static const char* keywords[] = {
 
 char *source_pos_string(struct source_pos pos)
 {
-    return talloc_asprintf(NULL, "%s:%d:%d", pos.filename, pos.line, pos.column);
+    return talloc_asprintf(NULL, "%s:%d:%d", pos.filename ? pos.filename : "-",
+                           pos.line, pos.column);
 }
 
 struct lexer *lexer_new(char *source, char *filename)

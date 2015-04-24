@@ -181,6 +181,7 @@ static struct ir_inst *cg_void(CTX *ctx, LOC loc)
 
 static struct ir_inst *cg_string(CTX *ctx, LOC loc, char *s)
 {
+    assert(s);
     return cg_const(ctx, loc, (struct ir_const_val) {
         .type = TYPE_STRING,
         .value = MAKE_UNION(VALUE, vstring, s),
@@ -860,7 +861,7 @@ static int lit_find_name(struct compound_lit *lit, char *name)
 static void lit_add_item(CTX *ctx, LOC loc, struct compound_lit *lit, int pos,
                          char *name, struct ir_inst *val)
 {
-    if (name && name[0]) {
+    if (name[0]) {
         int i = lit_find_name(lit, name);
         if (i >= 0) {
             lit->items[i].val = val;
@@ -882,7 +883,7 @@ static void lit_add_item(CTX *ctx, LOC loc, struct compound_lit *lit, int pos,
         while (pos + 1 > lit->positional_count) {
             if (!init)
                 init = cg_init(ctx, loc, val->result_type);
-            struct compound_item skip = {NULL, init};
+            struct compound_item skip = {"", init};
             BL_TARRAY_INSERT_AT(lit, lit->items, lit->items_count,
                                 lit->positional_count, skip);
             lit->positional_count++;
@@ -925,7 +926,7 @@ static struct compound_lit *cg_gen_lit(CTX *ctx, LOC loc, int exprs_count,
 
     for (int n = 0; n < exprs_count; n++) {
         struct ast_node *arg = exprs[n];
-        char *name = {0};
+        char *name = "";
         int pos = -1;
         LOC exloc = ast_get_loc(arg);
 
