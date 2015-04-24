@@ -77,6 +77,7 @@ so complicated that I stopped) included:
 
 Copyright
 ---------
-Most of this was written by me. talloc.c/.h is from Samba. The Makefile is
-adapted from mplayer's makefile. bstr.c/.h is from mplayer2. hashtable.c is
-inspired from Lua's table implementation, although no code was copied.
+Most of this was written by me. The Makefile is adapted from mplayer's makefile.
+hashtable.c is inspired from Lua's table implementation, although no code was
+copied. ta.c/.h is an API-compatible talloc (from Samba) replacement with
+better license and written by me (for mpv).

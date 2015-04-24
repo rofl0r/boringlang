@@ -1,0 +1,49 @@
+// TYPE: expr
+/* STDOUT:
+1 2 123
+*/
+
+fn printf {C} (fmt:c_string,...) : c_int;
+fn abort {C} () : void;
+
+fn assert(e:bool) : void {
+    if (!e)
+        abort();
+};
+
+// declaration
+struct t {
+    a: u32;
+    b: u32 = 5; // can have defaults other than 0
+    c: u32;
+};
+
+var x1 : t;
+assert(x1.a == 0 && x1.b == 5);
+
+// struct literals (for some reason, C99 style init is not implemented)
+x1 = (t){1, 2};
+assert(x1.a == 1 && x1.b == 2);
+
+// C99 style named fields
+x1 = (t){.c = 1, .a = 55};
+assert(x1.a == 55 && x1.b == 5 && x1.c == 1);
+
+fn foo(a:u32, b:u32 = 2, c:u32) : void {
+    printf(&"%d %d %d\n"[], a, b, c);
+};
+
+// function call arguments are handled by the same code as struct literals
+// so you get default arguments, named arguments, etc.
+foo(1, .c = 123);
+
+struct t2 {
+    a: u32;
+    b: u32[4]; // = {1,2,3,4}; // not implemented
+};
+
+var x2 : t2 = (t2){1, (u32[4]){2,3}};
+var x3 : t2;
+
+x3 = x2;
+assert(x3.b[1] == 3);
