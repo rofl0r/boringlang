@@ -49,6 +49,11 @@ assert(-0x8000000000000000 < 0);
 // booleans are kind of like 1-bit wide integers, but no integer promotion
 assert((~true) == false);
 
+// life without integer promotion kind of sucks
+assert_type("u8", 255 + 1);
+assert(255 + 1 == 0);
+assert(255i32 + 1 == 256);
+
 // even signed integer are supposed to follow 2's complement
 assert((127i8 + 1i8) == -128i8);
 
